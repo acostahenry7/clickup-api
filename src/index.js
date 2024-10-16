@@ -4,7 +4,7 @@ const hana = require("@sap/hana-client");
 const axios = require("axios");
 const cron = require("node-cron");
 
-const cronSet = "14 15 * * *";
+const cronSet = "00 18 * * *";
 
 app.listen(process.env.CLICKUP_PORT || 3000, () => {
   console.log(`Listening on port ${process.env.CLICKUP_PORT || 3000}`);
