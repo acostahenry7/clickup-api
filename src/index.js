@@ -6,7 +6,7 @@ const cron = require("node-cron");
 
 const cronSet = "30 18 * * *";
 
-app.listen(3000, () => {
+app.listen(process.env.CLICKUP_PORT || 3000, () => {
   console.log(`Listening on port 3000`);
 });
 
