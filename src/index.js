@@ -2,6 +2,9 @@ const express = require("express");
 const app = express();
 const hana = require("@sap/hana-client");
 const axios = require("axios");
+const cron = require("node-cron");
+
+const cronSet = "30 18 * * *";
 
 app.listen(3000, () => {
   console.log(`Listening on port 3000`);
@@ -2387,50 +2390,68 @@ async function startApi() {
   try {
     connection.connect(config);
 
-    let data = await connection.exec(`
-    SELECT 
-"Company",
-"company_name",
-"trans_type",
-"veh_year",
-"stock_type",
-"stock",
-"brand",
-"model",
-"model_name",
-"sale_channel",
-"invoice_date",
-"invoice_date_sort",
-SUM("quantity") AS "quantity", 
-SUM("rd_price") AS "rd_price",  
-SUM("us_price") AS "us_price"
-FROM (
-		
-		 SELECT
-		T0."Company",
-		T0."CompanyName" as "company_name",
-		T0."TransType" as "trans_type",
-		T0."Year_Vehiculo" as "veh_year",
-		T0."Tipo" as "stock_type",
-		T0."Inventario" as "stock",
-		T0."Marca" as  "brand",
-		T0."Modelo" as "model",
-		T0."U_GB_NombreModelo" as "model_name",
-		T0."SlpName" as "sale_channel",
-		TO_VARCHAR(T0."DocDate", 'DD/MM/YYYY') as "invoice_date",
-		t0."DocDate" as "invoice_date_sort",
-		T0."Quantity" as "quantity", 
-		CASE WHEN T0."DocCur" = 'DOP' THEN ROUND(COALESCE(T0."U_Pre_Vta",0),2) ELSE ROUND(COALESCE(T0."U_Pre_Vta",0)*(CASE WHEN T0."DocCur" = 'DOP' THEN T2."Rate" ELSE T0."DocRate" END), 2) END "rd_price",  
-		CASE WHEN T0."DocCur" = 'USD' THEN ROUND(COALESCE(T0."U_Pre_Vta",0),2) ELSE ROUND(COALESCE(T0."U_Pre_Vta",0)/(CASE WHEN T0."DocCur" = 'DOP' THEN T2."Rate" ELSE T0."DocRate" END), 2) END "us_price"
-		FROM "_SYS_BIC"."grupobonanza.views/GB_CA_VENTA_VEHICULOS_REPORTE" T0
-		INNER JOIN "_SYS_BIC"."grupobonanza.views/GB_CA_INVENTARIO_VEHICULOS_ENTRADA" T1 ON (T0."Company" = T1."Company" and T1."U_Unidad" = T0."U_SCGD_Cod_Unidad" )
-		INNER JOIN "DB_LM"."ORTT" T2 ON T2."Currency" = 'USD' and T2."RateDate" = T0."DocDate"
---WHERE "Chasis" = ''VF7SA5FS9HW500859''
-    )
-WHERE "invoice_date_sort" > '2024-08-28'
-GROUP BY "Company","company_name","trans_type","veh_year","stock_type","stock","brand","model","model_name","sale_channel","invoice_date","invoice_date_sort"
-ORDER BY "company_name", "invoice_date_sort"  desc, "brand"`);
+    let clickupData = await axios.get(
+      `https://api.clickup.com/api/v2/list/901703121217/task`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "pk_78190564_237RWYOXA7WMTL2JXG3O3EHRCYV2EEUZ",
+        },
+      }
+    );
 
+    let fromDate = new Date(parseInt(clickupData.data.tasks[0].date_created))
+      .toISOString()
+      .split("T")[0];
+
+    let query = ` SELECT
+    "Company",
+    "company_name",
+    "trans_type",
+    "veh_year",
+    "stock_type",
+    "stock",
+    "brand",
+    "model",
+    "model_name",
+    "sale_channel",
+    "invoice_date",
+    "invoice_date_sort",
+    SUM("quantity") AS "quantity",
+    SUM("rd_price") AS "rd_price",
+    SUM("us_price") AS "us_price"
+    FROM (
+
+    		 SELECT
+    		T0."Company",
+    		T0."CompanyName" as "company_name",
+    		T0."TransType" as "trans_type",
+    		T0."Year_Vehiculo" as "veh_year",
+    		T0."Tipo" as "stock_type",
+    		T0."Inventario" as "stock",
+    		T0."Marca" as  "brand",
+    		T0."Modelo" as "model",
+    		T0."U_GB_NombreModelo" as "model_name",
+    		T0."SlpName" as "sale_channel",
+    		TO_VARCHAR(T0."DocDate", 'DD/MM/YYYY') as "invoice_date",
+    		t0."DocDate" as "invoice_date_sort",
+    		T0."Quantity" as "quantity",
+    		CASE WHEN T0."DocCur" = 'DOP' THEN ROUND(COALESCE(T0."U_Pre_Vta",0),2) ELSE ROUND(COALESCE(T0."U_Pre_Vta",0)*(CASE WHEN T0."DocCur" = 'DOP' THEN T2."Rate" ELSE T0."DocRate" END), 2) END "rd_price",
+    		CASE WHEN T0."DocCur" = 'USD' THEN ROUND(COALESCE(T0."U_Pre_Vta",0),2) ELSE ROUND(COALESCE(T0."U_Pre_Vta",0)/(CASE WHEN T0."DocCur" = 'DOP' THEN T2."Rate" ELSE T0."DocRate" END), 2) END "us_price"
+    		FROM "_SYS_BIC"."grupobonanza.views/GB_CA_VENTA_VEHICULOS_REPORTE" T0
+    		INNER JOIN "_SYS_BIC"."grupobonanza.views/GB_CA_INVENTARIO_VEHICULOS_ENTRADA" T1 ON (T0."Company" = T1."Company" and T1."U_Unidad" = T0."U_SCGD_Cod_Unidad" )
+    		INNER JOIN "DB_LM"."ORTT" T2 ON T2."Currency" = 'USD' and T2."RateDate" = T0."DocDate"
+    --WHERE "Chasis" = ''VF7SA5FS9HW500859''
+        )
+    WHERE "invoice_date_sort" > '${fromDate}'
+    GROUP BY "Company","company_name","trans_type","veh_year","stock_type","stock","brand","model","model_name","sale_channel","invoice_date","invoice_date_sort"
+        ORDER BY "company_name", "invoice_date_sort"  desc, "brand"`;
+
+    let data = await connection.exec(query);
+
+    console.log(query, data.length);
+
+    let res;
     for (item of data) {
       console.log(new Date(item.invoice_date_sort).getTime());
 
@@ -2504,7 +2525,7 @@ ORDER BY "company_name", "invoice_date_sort"  desc, "brand"`);
         ],
       };
 
-      let res = await axios.post(
+      res = await axios.post(
         `https://api.clickup.com/api/v2/list/901703121217/task`,
         JSON.stringify(newTask),
         {
@@ -2524,6 +2545,8 @@ ORDER BY "company_name", "invoice_date_sort"  desc, "brand"`);
   }
 }
 
-startApi().then((res) => {
+cron.schedule(cronSet, async () => {
+  let res = await startApi();
+
   console.log(res);
 });
