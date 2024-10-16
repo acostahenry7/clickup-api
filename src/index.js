@@ -4,10 +4,10 @@ const hana = require("@sap/hana-client");
 const axios = require("axios");
 const cron = require("node-cron");
 
-const cronSet = "30 18 * * *";
+const cronSet = "14 15 * * *";
 
 app.listen(process.env.CLICKUP_PORT || 3000, () => {
-  console.log(`Listening on port 3000`);
+  console.log(`Listening on port ${process.env.CLICKUP_PORT || 3000}`);
 });
 
 let config = {
@@ -2391,7 +2391,7 @@ async function startApi() {
     connection.connect(config);
 
     let clickupData = await axios.get(
-      `https://api.clickup.com/api/v2/list/901703121217/task`,
+      `https://api.clickup.com/api/v2/list/901703121217/task?order_by=created`,
       {
         headers: {
           "Content-Type": "application/json",
@@ -2461,7 +2461,7 @@ async function startApi() {
         Marca: item.brand,
         assignees: [],
         tags: [],
-        status: "BACKLOG",
+        //status: "BACKLOG",
         priority: 1,
         due_date: 1508369194377,
         due_date_time: false,
